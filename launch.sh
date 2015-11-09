@@ -1,6 +1,5 @@
 #!/bin/bash
-
-#./cleanup.sh
+./cleanup.sh
 
 
 
@@ -26,6 +25,10 @@ DBNAME='Project1'
 aws rds create-db-instance --db-name $DBNAME --publicly-accessible --db-instance-identifier $DBINSTANCEIDENTIFIER --db-instance-class db.t2.micro --engine MySQL --allocated-storage 5 --master-username $DBUSERNAME --master-user-password $DBPASSWORD --db-subnet-group-name subnetgrp1test
 
 aws rds wait db-instance-available --db-instance-identifier $DBINSTANCEIDENTIFIER
+
+#create Read replica
+
+aws rds create-db-instance-read-replica --db-instance-identifier mp1SKread-replica --source-db-instance-identifier $DBINSTANCEIDENTIFIER
 
 mapfile -t instanceARR < <(aws ec2 run-instances --image-id $1 --count $2 --instance-type $3 --key-name $6 --security-group-id $4 --subnet-id $5 --associate-public-ip-address --iam-instance-profile Name=$7 --user-data file://../ITMO544-Fall-EnvSetup-MP1/install-env.sh --output table | grep InstanceId | sed "s/|//g" | tr -d ' ' | sed "s/InstanceId//g")
 
