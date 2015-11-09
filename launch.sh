@@ -2,19 +2,30 @@
 
 #./cleanup.sh
 
+
+
 #declare a variable
 
 declare -a instanceARR
-ELBNAME='itmo544SKelb'
-LAUNCHCONFIG='itmo544launchconfig'
-AUTOSCALINGNAME='itmo544autoscalinggroupname'
+
+#Subnet for RDS
+
+SUBNETGROUPNAME='rdssubnet'
+SUBNETID1='subnet-5e540975'
+SUBNETID2='subnet-2e250a77'
+aws rds create-db-subnet-group --db-subnet-group-name $SUBNETGROUPNAME --subnet-ids $SUBNETID1 $SUBNETID2 --db-subnet-group-description createdoncomdpmt
+
+
+#Create DB Instance
+
 DBINSTANCEIDENTIFIER='db1'
 DBUSERNAME='testconnection1'
 DBPASSWORD='testconnection1'
 DBNAME='Project1'
-SUBNETGROUPNAME='rdssubnet'
-SUBNETID1='subnet-5e540975'
-SUBNETID2='subnet-2e250a77'
+
+aws rds create-db-instance --db-name $DBNAME --publicly-accessible --db-instance-identifier $DBINSTANCEIDENTIFIER --db-instance-class db.t2.micro --engine MySQL --allocated-storage 5 --master-username $DBUSERNAME --master-user-password $DBPASSWORD --db-subnet-group-name subnetgrp1test
+
+aws rds wait db-instance-available --db-instance-identifier $DBINSTANCEIDENTIFIER
 
 mapfile -t instanceARR < <(aws ec2 run-instances --image-id $1 --count $2 --instance-type $3 --key-name $6 --security-group-id $4 --subnet-id $5 --associate-public-ip-address --iam-instance-profile Name=$7 --user-data file://../ITMO544-Fall-EnvSetup-MP1/install-env.sh --output table | grep InstanceId | sed "s/|//g" | tr -d ' ' | sed "s/InstanceId//g")
 
@@ -23,6 +34,8 @@ echo ${instanceARR[@]}
 
 aws ec2 wait instance-running --instance-ids ${instanceARR[@]}
 echo "instances are running"
+
+ELBNAME='itmo544SKelb'
 
 ELBURL=(`aws elb create-load-balancer --load-balancer-name $ELBNAME --listeners Protocol=HTTP,LoadBalancerPort=80,InstanceProtocol=HTTP,InstancePort=80 --security-groups $4 --subnets $5 --output=text`);
 echo $ELBURL
@@ -44,9 +57,13 @@ echo "\n"
 
 #Launch Config
 
+LAUNCHCONFIG='itmo544launchconfig'
+
 aws autoscaling create-launch-configuration --launch-configuration-name $LAUNCHCONFIG --image-id $1 --key-name $6 --security-groups $4 --instance-type $3 --user-data file://../ITMO544-Fall-EnvSetup-MP1/install-env.sh --iam-instance-profile $7
 
 #Autoscaling group
+
+AUTOSCALINGNAME='itmo544autoscalinggroupname'
 
 aws autoscaling create-auto-scaling-group --auto-scaling-group-name $AUTOSCALINGNAME --launch-configuration-name $LAUNCHCONFIG --load-balancer-names $ELBNAME  --health-check-type ELB --min-size 1 --max-size 3 --desired-capacity 2 --default-cooldown 600 --health-check-grace-period 120 --vpc-zone-identifier $5 
 
@@ -60,26 +77,11 @@ SCALINGDECREASE=(`aws autoscaling put-scaling-policy --auto-scaling-group-name $
 
 #Cloud Watch Metric
 
-aws cloudwatch put-metric-alarm --alarm-name AddCapacity --alarm-description "Alarm when CPU exceeds 30 percent" --metric-name CPUUtilization --namespace AWS/EC2 --statistic Average --period 60 --threshold 30 --comparison-operator GreaterThanOrEqualToThreshold --evaluation-periods 1 --unit Percent --dimensions "Name=AutoScalingGroupName,Value=$AUTOSCALINGNAME" --alarm-actions SCALINGINCREASE
+aws cloudwatch put-metric-alarm --alarm-name AddCapacity --alarm-description "Alarm when CPU exceeds 30 percent" --metric-name CPUUtilization --namespace AWS/EC2 --statistic Average --period 60 --threshold 30 --comparison-operator GreaterThanOrEqualToThreshold --evaluation-periods 1 --unit Percent --dimensions "Name=AutoScalingGroupName,Value=$AUTOSCALINGNAME" --alarm-actions $SCALINGINCREASE
 
-aws cloudwatch put-metric-alarm --alarm-name ReduceCapacity --alarm-description "Alarm when CPU falls below 10 percent" --metric-name CPUUtilization --namespace AWS/EC2 --statistic Average --period 60 --threshold 10 --comparison-operator LessThanOrEqualToThreshold --evaluation-periods 1 --unit Percent --dimensions "Name=AutoScalingGroupName,Value=$AUTOSCALINGNAME" --alarm-actions SCALINGDECREASE
+aws cloudwatch put-metric-alarm --alarm-name ReduceCapacity --alarm-description "Alarm when CPU falls below 10 percent" --metric-name CPUUtilization --namespace AWS/EC2 --statistic Average --period 60 --threshold 10 --comparison-operator LessThanOrEqualToThreshold --evaluation-periods 1 --unit Percent --dimensions "Name=AutoScalingGroupName,Value=$AUTOSCALINGNAME" --alarm-actions $SCALINGDECREASE
 
-#Subnet for RDS
 
-aws rds create-db-subnet-group --db-subnet-group-name $SUBNETGROUPNAME --subnet-ids $SUBNETID1 $SUBNETID2 --db-subnet-group-description createdoncomdpmt
 
-#aws rds create-db-instance --db-name MiniProjectData --db-instance-identifier MP1 --db-instance-class db.t2.micro --engine MySql --allocated-storage 20 --master-username snehamp1db --master-user-password snehamp1db --db-subnet-group-name default-vpc-fb2ae59f
 
-#Create DB Instance
 
-aws rds create-db-instance --db-name $DBNAME --publicly-accessible --db-instance-identifier $DBINSTANCEIDENTIFIER --db-instance-class db.t2.micro --engine MySQL --allocated-storage 5 --master-username $DBUSERNAME --master-user-password $DBPASSWORD --db-subnet-group-name subnetgrp1test
-
-aws rds wait db-instance-available --db-instance-identifier $DBINSTANCEIDENTIFIER
-
-ENDPOINT=(`aws rds describe-db-instances --db-instance-identifier $DBINSTANCEIDENTIFIER --output table | grep Address | sed -e "s/|//g" -e "s/[^ ]* //" -e "s/[^ ]* //" -e "s/[^ ]* //" -e "s/[^ ]* //"`)
-
-mysql -h $ENDPOINT -P 3306 -u $DBUSERNAME -p $DBPASSWORD $DBNAME
-
-CREATE TABLE IF NOT EXISTS MiniProject1(ID INT NOT NULL AUTO_INCREMENT PRIMARY KEY, uname VARCHAR(50), email VARCHAR(100), phoneforsms VARCHAR(20), raws3url VARCHAR(256), finisheds3url VARCHAR(256), jpegfilename VARCHAR(256), state tinyint(3) CHECK(state IN(0,1,2)), datetime timestamp);
-
-exit
