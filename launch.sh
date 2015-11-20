@@ -84,7 +84,19 @@ aws cloudwatch put-metric-alarm --alarm-name AddCapacity --alarm-description "Al
 
 aws cloudwatch put-metric-alarm --alarm-name ReduceCapacity --alarm-description "Alarm when CPU falls below 10 percent" --metric-name CPUUtilization --namespace AWS/EC2 --statistic Average --period 60 --threshold 10 --comparison-operator LessThanOrEqualToThreshold --evaluation-periods 1 --unit Percent --dimensions "Name=AutoScalingGroupName,Value=$AUTOSCALINGNAME" --alarm-actions $SCALINGDECREASE
 
+# SNS For ImageUpload
+
+SNSIMAGETOPICNAME=ImageTopicSK
+
+SNSIMAGEARN=(`aws sns create-topic --name $SNSIMAGETOPICNAME`)
+aws sns set-topic-attributes --topic-arn $SNSIMAGEARN --attribute-name DisplayName --attribute-value $SNSIMAGETOPICNAME 
 
 
+# SNS For Cloud MetricAlarm
+
+SNSCLOUDMETRICNAME=CloudMetricTopicSK
+
+SNSCLOUDMETRICSARN=(`aws sns create-topic --name $SNSCLOUDMETRICNAME`)
+aws sns set-topic-attributes --topic-arn $SNSCLOUDMETRICSARN --attribute-name DisplayName --attribute-value $SNSCLOUDMETRICNAME
 
 
